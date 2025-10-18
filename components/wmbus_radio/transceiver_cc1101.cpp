@@ -168,6 +168,14 @@ optional<uint8_t> CC1101::read() {
       }
 
       this->rx_loop_.bytesLeft = this->rx_loop_.length - 3;
+      
+      // Validate that the expected packet size doesn't exceed buffer capacity
+      if (this->rx_loop_.length > sizeof(this->rx_buffer_)) {
+        ESP_LOGE(TAG, "Packet too large for buffer: %d > %zu", 
+                 this->rx_loop_.length, sizeof(this->rx_buffer_));
+        this->rx_loop_.state = INIT_RX;
+        return {};
+      }
 
       if (this->rx_loop_.length < MAX_FIXED_LENGTH) {
         this->spi_write(CC1101_PKTLEN, (uint8_t)this->rx_loop_.length);
@@ -194,16 +202,31 @@ optional<uint8_t> CC1101::read() {
 
       uint8_t bytesInFIFO = this->spi_read(CC1101_RXBYTES | 0xC0) & 0x7F;
       if (bytesInFIFO > 1) {
+        // Calculate safe read size to prevent buffer overflow
+        uint16_t safe_read_size = bytesInFIFO - 1;
+        if (safe_read_size > this->rx_loop_.bytesLeft) {
+          safe_read_size = this->rx_loop_.bytesLeft;
+        }
+        
+        // Ensure we don't write beyond buffer
+        size_t bytes_to_buffer_end = 
+            (this->rx_buffer_ + sizeof(this->rx_buffer_)) - this->rx_loop_.pByteIndex;
+        if (safe_read_size > bytes_to_buffer_end) {
+          ESP_LOGE(TAG, "Buffer overflow prevented: %d > %zu", safe_read_size, bytes_to_buffer_end);
+          this->rx_loop_.state = INIT_RX;
+          return {};
+        }
+        
         // Read data from FIFO
         this->delegate_->begin_transaction();
         this->delegate_->transfer(CC1101_RXFIFO | 0xC0); // Burst read
-        for (int i = 0; i < bytesInFIFO - 1; i++) {
+        for (int i = 0; i < safe_read_size; i++) {
           *(this->rx_loop_.pByteIndex++) = this->delegate_->transfer(0x00);
         }
         this->delegate_->end_transaction();
 
-        this->rx_loop_.bytesLeft -= (bytesInFIFO - 1);
-        this->rx_loop_.bytesRx += (bytesInFIFO - 1);
+        this->rx_loop_.bytesLeft -= safe_read_size;
+        this->rx_loop_.bytesRx += safe_read_size;
         this->max_wait_time_ += this->extra_time_;
       }
     }
@@ -218,6 +241,16 @@ optional<uint8_t> CC1101::read() {
   if (!overfl && sync_lost && (this->rx_loop_.state > WAIT_FOR_DATA)) {
     // Read remaining bytes
     if (this->rx_loop_.bytesLeft > 0) {
+      // Ensure we don't write beyond buffer
+      size_t bytes_to_buffer_end = 
+          (this->rx_buffer_ + sizeof(this->rx_buffer_)) - this->rx_loop_.pByteIndex;
+      if (this->rx_loop_.bytesLeft > bytes_to_buffer_end) {
+        ESP_LOGE(TAG, "Buffer overflow prevented in final read: %d > %zu", 
+                 this->rx_loop_.bytesLeft, bytes_to_buffer_end);
+        this->rx_loop_.state = INIT_RX;
+        return {};
+      }
+      
       this->delegate_->begin_transaction();
       this->delegate_->transfer(CC1101_RXFIFO | 0xC0); // Burst read
       for (int i = 0; i < this->rx_loop_.bytesLeft; i++) {
