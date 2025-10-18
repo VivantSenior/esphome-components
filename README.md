@@ -5,9 +5,11 @@ Version 5 based on Kuba's dirty [fork](https://github.com/IoTLabs-pl/esphome-com
 [version 3](https://github.com/SzczepanLeon/esphome-components/tree/version_3)
 [version 2](https://github.com/SzczepanLeon/esphome-components/tree/version_2)
 
+> **_UPDATE:_** CC1101 support has been added to the main branch! See [CC1101 Usage Guide](docs/CC1101_USAGE.md) for detailed instructions.
+
 
 # TODO:
-- Add backward support for CC1101
+- ~~Add backward support for CC1101~~ ✅ DONE
 - Add support for SX1262 (with limited frame length)
 - ...
 - Prepare packages for ready made boards (like UltimateReader) with displays, leds etc.
@@ -191,6 +193,35 @@ text_sensor:
 ```
 
 For SX1276 radio you need to configure SPI instance as usual in ESPHome and additionally specify reset pin and IRQ pin (as DIO1). Interrupts are triggered on non empty FIFO. 
+
+For CC1101 radio you need to configure SPI instance as usual in ESPHome and additionally specify:
+- reset pin (CS pin)
+- irq_pin (GDO0 pin - used for FIFO threshold)
+- gdo0_pin (same as irq_pin)
+- gdo2_pin (GDO2 pin - used for sync detection)
+- frequency (optional, defaults to 868.95 MHz)
+
+Example configuration for CC1101:
+```yaml
+spi:
+  clk_pin: GPIO14
+  mosi_pin: GPIO13
+  miso_pin: GPIO12
+
+wmbus_radio:
+  radio_type: CC1101
+  cs_pin: GPIO2
+  reset_pin: GPIO2  # CS pin
+  irq_pin: GPIO5    # GDO0
+  gdo0_pin: GPIO5   # GDO0
+  gdo2_pin: GPIO4   # GDO2
+  frequency: 868.95
+  on_frame:
+    - then:
+        - logger.log:
+            format: "RSSI: %ddBm T: %s (%d)"
+            args: [ frame->rssi(), frame->as_hex().c_str(), frame->data().size() ]
+``` 
 
 In order to pull latest wmbusmeters code run:
 ```bash

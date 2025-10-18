@@ -26,6 +26,9 @@ CONF_RADIO_ID = "radio_id"
 CONF_ON_FRAME = "on_frame"
 CONF_RADIO_TYPE = "radio_type"
 CONF_MARK_AS_HANDLED = "mark_as_handled"
+CONF_GDO0_PIN = "gdo0_pin"
+CONF_GDO2_PIN = "gdo2_pin"
+CONF_FREQUENCY = "frequency"
 
 radio_ns = cg.esphome_ns.namespace("wmbus_radio")
 RadioComponent = radio_ns.class_("Radio", cg.Component)
@@ -51,6 +54,9 @@ CONFIG_SCHEMA = (
             cv.Required(CONF_RADIO_TYPE): cv.one_of(*TRANSCEIVER_NAMES, upper=True),
             cv.Required(CONF_RESET_PIN): pins.internal_gpio_output_pin_schema,
             cv.Required(CONF_IRQ_PIN): pins.internal_gpio_input_pin_schema,
+            cv.Optional(CONF_GDO0_PIN): pins.internal_gpio_input_pin_schema,
+            cv.Optional(CONF_GDO2_PIN): pins.internal_gpio_input_pin_schema,
+            cv.Optional(CONF_FREQUENCY, default=868.95): cv.float_range(min=300, max=928),
             cv.Optional(CONF_ON_FRAME): automation.validate_automation(
                 {
                     cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(FrameTrigger),
@@ -77,6 +83,18 @@ async def to_code(config):
 
     irq_pin = await cg.gpio_pin_expression(config[CONF_IRQ_PIN])
     cg.add(radio_var.set_irq_pin(irq_pin))
+
+    # CC1101-specific configuration
+    if config[CONF_RADIO_TYPE] == "CC1101":
+        if CONF_GDO0_PIN in config:
+            gdo0_pin = await cg.gpio_pin_expression(config[CONF_GDO0_PIN])
+            cg.add(radio_var.set_gdo0_pin(gdo0_pin))
+        
+        if CONF_GDO2_PIN in config:
+            gdo2_pin = await cg.gpio_pin_expression(config[CONF_GDO2_PIN])
+            cg.add(radio_var.set_gdo2_pin(gdo2_pin))
+        
+        cg.add(radio_var.set_frequency(config[CONF_FREQUENCY]))
 
     await spi.register_spi_device(radio_var, config)
     await cg.register_component(radio_var, config)

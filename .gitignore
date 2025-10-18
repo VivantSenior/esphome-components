@@ -175,3 +175,6 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# CodeQL artifacts
+_codeql_detected_source_root
