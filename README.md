@@ -5,7 +5,7 @@ Version 5 based on Kuba's dirty [fork](https://github.com/IoTLabs-pl/esphome-com
 [version 3](https://github.com/SzczepanLeon/esphome-components/tree/version_3)
 [version 2](https://github.com/SzczepanLeon/esphome-components/tree/version_2)
 
-> **_UPDATE:_** CC1101 support has been added to the main branch! See usage example below.
+> **_UPDATE:_** CC1101 support has been added to the main branch! See [CC1101 Usage Guide](docs/CC1101_USAGE.md) for detailed instructions.
 
 
 # TODO:
