@@ -1,6 +1,7 @@
 #include "transceiver_cc1101.h"
 #include "cc1101_rf_settings.h"
 #include "esphome/core/log.h"
+#include <algorithm>
 
 namespace esphome {
 namespace wmbus_radio {
