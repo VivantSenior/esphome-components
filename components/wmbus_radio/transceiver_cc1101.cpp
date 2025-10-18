@@ -55,11 +55,13 @@ bool CC1101::cc1101_init() {
   this->spi_write(CC1101_FREQ1, freq1);
   this->spi_write(CC1101_FREQ0, freq0);
 
-  // Calibrate
-  this->spi_write(0x30 | CC1101_SCAL, 0x00); // Strobe SCAL
+  // Calibrate - command strobe
+  this->delegate_->begin_transaction();
+  this->delegate_->transfer(CC1101_SCAL);
+  this->delegate_->end_transaction();
 
-  // Check version
-  uint8_t version = this->spi_read(CC1101_VERSION | 0xC0); // Read status register
+  // Check version - status register read (bit 6 and 7 set)
+  uint8_t version = this->spi_read(CC1101_VERSION | 0xC0);
 
   if (version == 0 || version == 255) {
     ESP_LOGE(TAG, "CC1101 not found or invalid version: %d", version);
@@ -117,12 +119,12 @@ optional<uint8_t> CC1101::read() {
       uint8_t preamble[2];
       // Read the first 3 bytes
       uint8_t temp[3];
-      this->enable();
-      this->transfer_byte(CC1101_RXFIFO | 0xC0); // Burst read
+      this->delegate_->begin_transaction();
+      this->delegate_->transfer(CC1101_RXFIFO | 0xC0); // Burst read
       for (int i = 0; i < 3; i++) {
-        temp[i] = this->transfer_byte(0x00);
+        temp[i] = this->delegate_->transfer(0x00);
       }
-      this->disable();
+      this->delegate_->end_transaction();
 
       this->rx_loop_.bytesRx = 3;
       const uint8_t *currentByte = temp;
@@ -192,12 +194,12 @@ optional<uint8_t> CC1101::read() {
       uint8_t bytesInFIFO = this->spi_read(CC1101_RXBYTES | 0xC0) & 0x7F;
       if (bytesInFIFO > 1) {
         // Read data from FIFO
-        this->enable();
-        this->transfer_byte(CC1101_RXFIFO | 0xC0); // Burst read
+        this->delegate_->begin_transaction();
+        this->delegate_->transfer(CC1101_RXFIFO | 0xC0); // Burst read
         for (int i = 0; i < bytesInFIFO - 1; i++) {
-          *(this->rx_loop_.pByteIndex++) = this->transfer_byte(0x00);
+          *(this->rx_loop_.pByteIndex++) = this->delegate_->transfer(0x00);
         }
-        this->disable();
+        this->delegate_->end_transaction();
 
         this->rx_loop_.bytesLeft -= (bytesInFIFO - 1);
         this->rx_loop_.bytesRx += (bytesInFIFO - 1);
@@ -215,12 +217,12 @@ optional<uint8_t> CC1101::read() {
   if (!overfl && sync_lost && (this->rx_loop_.state > WAIT_FOR_DATA)) {
     // Read remaining bytes
     if (this->rx_loop_.bytesLeft > 0) {
-      this->enable();
-      this->transfer_byte(CC1101_RXFIFO | 0xC0); // Burst read
+      this->delegate_->begin_transaction();
+      this->delegate_->transfer(CC1101_RXFIFO | 0xC0); // Burst read
       for (int i = 0; i < this->rx_loop_.bytesLeft; i++) {
-        *(this->rx_loop_.pByteIndex++) = this->transfer_byte(0x00);
+        *(this->rx_loop_.pByteIndex++) = this->delegate_->transfer(0x00);
       }
-      this->disable();
+      this->delegate_->end_transaction();
       this->rx_loop_.bytesRx += this->rx_loop_.bytesLeft;
     }
 
@@ -263,13 +265,19 @@ bool CC1101::start_rx(bool force) {
   this->sync_time_ = millis();
   this->max_wait_time_ = this->extra_time_;
 
-  // Enter IDLE mode
-  this->spi_write(0x30 | CC1101_SIDLE, 0x00); // Strobe SIDLE
+  // Enter IDLE mode - command strobe
+  this->delegate_->begin_transaction();
+  this->delegate_->transfer(CC1101_SIDLE);
+  this->delegate_->end_transaction();
   delayMicroseconds(100);
 
-  // Flush TX and RX FIFOs
-  this->spi_write(0x30 | CC1101_SFTX, 0x00); // Strobe SFTX
-  this->spi_write(0x30 | CC1101_SFRX, 0x00); // Strobe SFRX
+  // Flush TX and RX FIFOs - command strobes
+  this->delegate_->begin_transaction();
+  this->delegate_->transfer(CC1101_SFTX);
+  this->delegate_->end_transaction();
+  this->delegate_->begin_transaction();
+  this->delegate_->transfer(CC1101_SFRX);
+  this->delegate_->end_transaction();
 
   // Initialize RX info
   this->rx_loop_.lengthField = 0;
@@ -287,8 +295,10 @@ bool CC1101::start_rx(bool force) {
   // Set infinite length mode
   this->spi_write(CC1101_PKTCTRL0, INFINITE_PACKET_LENGTH);
 
-  // Enter RX mode
-  this->spi_write(0x30 | CC1101_SRX, 0x00); // Strobe SRX
+  // Enter RX mode - command strobe
+  this->delegate_->begin_transaction();
+  this->delegate_->transfer(CC1101_SRX);
+  this->delegate_->end_transaction();
   delayMicroseconds(100);
 
   this->rx_loop_.state = WAIT_FOR_SYNC;
